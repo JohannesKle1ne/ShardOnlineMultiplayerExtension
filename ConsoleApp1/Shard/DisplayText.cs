@@ -11,6 +11,7 @@
 using SDL2;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 
 namespace Shard
 {
@@ -71,6 +72,7 @@ namespace Shard
         int _access;
         private List<TextDetails> myTexts;
         private Dictionary<string, IntPtr> fontLibrary;
+        private Color _backgroundColor;
         public override void clearDisplay()
         {
             foreach (TextDetails td in myTexts)
@@ -79,7 +81,7 @@ namespace Shard
             }
 
             myTexts.Clear();
-            SDL.SDL_SetRenderDrawColor(_rend, 0, 0, 0, 255);
+            SDL.SDL_SetRenderDrawColor(_rend, _backgroundColor.R, _backgroundColor.G, _backgroundColor.B, _backgroundColor.A);
             SDL.SDL_RenderClear(_rend);
 
         }
@@ -139,6 +141,17 @@ namespace Shard
                  (uint)SDL.SDL_WindowFlags.SDL_WINDOW_FULLSCREEN_DESKTOP);
         }
 
+        public override void setSize(int w, int h)
+        {
+            base.setSize(w, h);
+            SDL.SDL_SetWindowSize(_window, w, h);
+        }
+
+        public override void setBackgroundColor(Color c)
+        {
+            _backgroundColor = c;
+        }
+
         public override void initialize()
         {
             fontLibrary = new Dictionary<string, IntPtr>();
@@ -162,7 +175,8 @@ namespace Shard
 
             SDL.SDL_SetRenderDrawBlendMode(_rend, SDL.SDL_BlendMode.SDL_BLENDMODE_BLEND);
 
-            SDL.SDL_SetRenderDrawColor(_rend, 0, 0, 0, 255);
+            _backgroundColor = Color.Black;
+            SDL.SDL_SetRenderDrawColor(_rend, _backgroundColor.R, _backgroundColor.G, _backgroundColor.B, _backgroundColor.A);
 
 
             myTexts = new List<TextDetails>();

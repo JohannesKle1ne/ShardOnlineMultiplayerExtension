@@ -58,6 +58,11 @@ namespace Shard
         {
         }
 
+        public virtual void setBackgroundColor(Color c)
+        {
+
+        }
+
         public virtual void addToDraw(GameObject gob)
         {
         }

@@ -24,6 +24,7 @@ namespace Shard
         private static InputSystem input;
         private static PhysicsManager phys;
         private static AssetManagerBase asset;
+        private static NetworkManager netMan;
 
         private static int targetFrameRate;
         private static int millisPerFrame;
@@ -251,6 +252,16 @@ namespace Shard
             startTime = getCurrentMillis();
             frames = 0;
             frameTimes = new List<long>();
+
+
+            if (runningGame is NetworkedGame)
+            {
+                netMan = new NetworkManager((NetworkedGame)runningGame);
+
+                NetworkClient client = NetworkClient.GetInstance();
+                client.Start();
+                client.setManager(netMan, (GameDemoSOME)runningGame);
+            }
             // Start the game running.
             runningGame.initialize();
 
@@ -276,6 +287,8 @@ namespace Shard
 
                 // Update 
                 runningGame.update();
+
+                netMan?.update();
                 // Input
 
                 if (runningGame.isRunning() == true)

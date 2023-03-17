@@ -24,6 +24,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
 namespace Shard
@@ -326,16 +327,41 @@ namespace Shard
                 }
 
                 impulse = checkCollisionBetweenObjects(col.A, col.B);
+                string direction = getCollisionDirection(col.A, col.B);
 
                 if (impulse != null)
                 {
                     ch.onCollisionStay(col.B);
                     ch2.onCollisionStay(col.A);
+
+
+
+
+                    if (ch is PositionCollisionHandler)
+                    {
+                        ((PositionCollisionHandler)ch).onCollisionStay(col.B, direction);
+                    }
+
+                    if (ch2 is PositionCollisionHandler)
+                    {
+                        ((PositionCollisionHandler)ch2).onCollisionStay(col.A, inverseDirection(direction));
+                    }
                 }
                 else
                 {
                     ch.onCollisionExit(col.B);
                     ch2.onCollisionExit(col.A);
+
+                    if (ch is PositionCollisionHandler)
+                    {
+                        ((PositionCollisionHandler)ch).onCollisionExit(col.B, direction);
+                    }
+
+                    if (ch2 is PositionCollisionHandler)
+                    {
+                        ((PositionCollisionHandler)ch2).onCollisionExit(col.A, inverseDirection(direction));
+                    }
+
                     toRemove.Add(col);
                 }
 
@@ -522,9 +548,23 @@ namespace Shard
 
                     }
 
+                    string direction = getCollisionDirection(ob.A, ob.B);
+
 
                     ((CollisionHandler)ob.A.Parent).onCollisionEnter(ob.B);
                     ((CollisionHandler)ob.B.Parent).onCollisionEnter(ob.A);
+
+
+                    if (ob.A.Parent is PositionCollisionHandler)
+                    {
+                        ((PositionCollisionHandler)ob.A.Parent).onCollisionEnter(ob.B, direction);
+                    }
+
+                    if (ob.B.Parent is PositionCollisionHandler)
+                    {
+                        ((PositionCollisionHandler)ob.B.Parent).onCollisionEnter(ob.A, inverseDirection(direction));
+                    }
+
                     colliding.Add(ob);
 
 
@@ -543,6 +583,66 @@ namespace Shard
 
 
             }
+        }
+
+        public string inverseDirection(string direction)
+        {
+            if (direction == "Right")
+            {
+                return "Left";
+            }
+            if (direction == "Left")
+            {
+                return "Right";
+            }
+            if (direction == "Top")
+            {
+                return "Bottom";
+            }
+
+            return "Top";
+
+        }
+
+        public string getCollisionDirection(PhysicsBody a, PhysicsBody b)
+        {
+            float bMinY = b.MinAndMaxY[0];
+            float bMaxY = b.MinAndMaxY[1];
+            float aMinY = a.MinAndMaxY[0];
+            float aMaxY = a.MinAndMaxY[1];
+
+            float bMinX = b.MinAndMaxX[0];
+            float bMaxX = b.MinAndMaxX[1];
+            float aMinX = a.MinAndMaxX[0];
+            float aMaxX = a.MinAndMaxX[1];
+
+            float diffTop = Math.Abs(bMaxY - aMinY);
+            float diffBottom = Math.Abs(bMinY - aMaxY);
+            float diffLeft = Math.Abs(bMaxX - aMinX);
+            float diffRight = Math.Abs(bMinX - aMaxX);
+
+            float[] diffs = { diffTop, diffBottom, diffLeft, diffRight };
+            float minValue = diffs.Min();
+
+            if (diffTop == minValue)
+            {
+                return "Top";
+            }
+
+            if (diffBottom == minValue)
+            {
+                return "Bottom";
+            }
+
+            if (diffLeft == minValue)
+            {
+                return "Left";
+            }
+
+
+            return "Right";
+
+
         }
 
         public void reportCollisionsInAxis(SAPEntry start)

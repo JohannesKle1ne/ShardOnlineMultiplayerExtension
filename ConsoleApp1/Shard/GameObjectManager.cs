@@ -43,6 +43,11 @@ namespace Shard
             myObjects.Remove(gob);
         }
 
+        public List<GameObject> getAllGameObjects()
+        {
+            return myObjects;
+        }
+
 
         public void physicsUpdate()
         {
