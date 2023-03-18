@@ -21,16 +21,11 @@
 *   @author Michael Heron
 *   @version 1.0
 *   
-*   Several substantial contributions to the code made by others:
-*   @author Mårten Åsberg (see Changelog for 1.0.1)
-*   
 */
 
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
-using System.Numerics;
 
 namespace Shard
 {
@@ -44,7 +39,6 @@ namespace Shard
         private float angularDrag;
         private float drag;
         private float torque;
-        private Vector2 force;
         private float mass;
         private double timeInterval;
         private float maxForce, maxTorque;
@@ -57,16 +51,14 @@ namespace Shard
         private Color debugColor;
         public Color DebugColor { get => debugColor; set => debugColor = value; }
 
+        private Dictionary<Vector, float> myForces;
+        private Dictionary<Vector, float> forceOffsets;
         private float[] minAndMaxX;
         private float[] minAndMaxY;
 
-        public void applyGravity(float modifier, Vector2 dir)
+        public void applyGravity(float modifier)
         {
-
-            Vector2 gf = dir * modifier;
-
-            addForce(gf);
-
+            addForce(new Vector(0, 1), modifier);
         }
 
         public float AngularDrag { get => angularDrag; set => angularDrag = value; }
@@ -87,9 +79,12 @@ namespace Shard
 
         public void drawMe()
         {
-            foreach (Collider col in myColliders)
+            if (PhysicsManager.getInstance().Debugging)
             {
-                col.drawMe(DebugColor);
+                foreach (Collider col in myColliders)
+                {
+                    col.drawMe(DebugColor);
+                }
             }
         }
 
@@ -134,6 +129,8 @@ namespace Shard
             myColliders = new List<Collider>();
             collisionCandidates = new List<Collider>();
 
+            myForces = new Dictionary<Vector, float>();
+            forceOffsets = new Dictionary<Vector, float>();
             Parent = p;
             Trans = p.Transform;
             colh = (CollisionHandler)p;
@@ -176,22 +173,35 @@ namespace Shard
                 torque = -1 * MaxTorque;
             }
 
-
         }
 
         public void reverseForces(float prop)
         {
+            List<Vector> keys;
+
             if (Kinematic)
             {
                 return;
             }
 
-            force *= -prop;
+            keys = new List<Vector>(myForces.Keys);
+
+            foreach (Vector d in keys)
+            {
+                myForces[d] = -1 * myForces[d] * prop;
+            }
+
         }
 
         public void impartForces(PhysicsBody other, float massProp)
         {
-            other.addForce(force * massProp);
+            List<Vector> keys = new List<Vector>(myForces.Keys);
+
+            foreach (Vector d in keys)
+            {
+                Debug.Log ("Imparting force on " + other.Parent + ", x" + massProp + ", " + d);
+                other.addForce(new Vector(d.X, d.Y), (myForces[d] * massProp));
+            }
 
             recalculateColliders();
 
@@ -199,78 +209,121 @@ namespace Shard
 
         public void stopForces()
         {
-            force = Vector2.Zero;
+            myForces.Clear();
         }
 
-        public void reflectForces(Vector2 impulse)
+        public void reflectForces(Vector impulse)
         {
-            Vector2 reflect = new Vector2(0, 0);
+            Vector reflect = new Vector(1, 1);
 
-            Debug.Log ("Reflecting " + impulse);
 
             // We're being pushed to the right, so we must have collided with the right.
             if (impulse.X > 0)
             {
-                reflect.X = -1;
+                reflect.X *= -1;
             }
 
             // We're being pushed to the left, so we must have collided with the left.
             if (impulse.X < 0)
             {
-                reflect.X = -1;
+                reflect.X *= -1;
 
             }
 
             // We're being pushed upwards, so we must have collided with the top.
             if (impulse.Y < 0)
             {
-                reflect.Y = -1;
+                reflect.Y *= -1;
             }
 
             // We're being pushed downwards, so we must have collided with the bottom.
             if (impulse.Y > 0)
             {
-                reflect.Y = -1;
+                reflect.Y *= -1;
 
             }
 
-
-            force *= reflect;
-
             Debug.Log("Reflect is " + reflect);
 
+            foreach (KeyValuePair<Vector, float> kvp in myForces)
+            {
+                kvp.Key.X *= reflect.X;
+                kvp.Key.Y *= reflect.Y;
+            }
+
         }
 
-        public void reduceForces(float prop) {
-            force *= prop;
+        public float getForce(Vector dir)
+        {
+            if (myForces.ContainsKey(dir) == false)
+            {
+                return 0;
+            }
+
+            return myForces[dir];
         }
 
-        public void addForce(Vector2 dir, float force) {
-            addForce(dir * force);
+        public void reduceForces (float prop) {
+            foreach (KeyValuePair<Vector, float> kvp in myForces)
+            {
+                myForces[kvp.Key] *= prop;
+            }
         }
 
-        public void addForce(Vector2 dir)
+        public void addForce(Vector dir, float force)
         {
             if (Kinematic)
             {
                 return;
             }
 
-            dir /= Mass;
-
-            // Set a lower bound.
-            if (dir.LengthSquared() < 0.0001)
+            if (dir == null)
             {
                 return;
             }
 
-            force += dir;
+            force = (force / Mass);
 
-            // Set a higher bound.
-            if (force.Length() > MaxForce)
+            Debug.Log (Parent + " adding force " + dir + ", " + force);
+            // Set a lower bound.
+            if (Math.Abs(force) < 0.01)
             {
-                force = Vector2.Normalize(force) * MaxForce;
+                return;
             }
+
+            // This lets us reduce the number of specific forces that can be generated in the 
+            // same direction and to make the system more consistent.   You change intensity 
+            // of a vector with the force, not with the direction.
+            dir.normalize();
+
+            // It's possible that bad input will cause a problem here such as normalizing a 
+            // 0.0 vector.   If the vector we normalize is not a valid vector, just get rid 
+            // of it. 
+            if (dir.isValid() == false)
+            {
+                return;
+            }
+
+            if (myForces.ContainsKey(dir) == false)
+            {
+                myForces[dir] = 0;
+            }
+
+
+
+            myForces[dir] += force;
+
+            if (myForces[dir] > MaxForce)
+            {
+                myForces[dir] = MaxForce;
+            }
+
+            if (myForces[dir] < -1 * MaxForce)
+            {
+                myForces[dir] = -1 * MaxForce;
+            }
+
+
         }
 
         public void recalculateColliders()
@@ -286,42 +339,92 @@ namespace Shard
 
         public void physicsTick()
         {
-            List<Vector2> toRemove;
+            List<Vector> toRemove;
+            Vector dir;
             float force;
             float rot = 0;
+            float ke;
 
+            toRemove = new List<Vector>();
 
-            toRemove = new List<Vector2>();
+            ke = (float)((Math.Abs(torque)));
 
-            rot = torque;
+            if (torque < 0)
+            {
+                rot = -1 * ke;
+
+                torque += AngularDrag;
+            }
+            if (torque > 0)
+            {
+                rot = ke;
+                torque -= AngularDrag;
+            }
+
 
             if (Math.Abs(torque) < AngularDrag)
             {
                 torque = 0;
             }
-            else
-            {
-                torque -= Math.Sign(torque) * AngularDrag;
-            }
 
 
+            //            Debug.Log ("Rotation is " + rot);
 
             trans.rotate(rot);
 
-            force = this.force.Length();
 
-			trans.translate(this.force);
 
-            if (force < Drag)
+
+            foreach (KeyValuePair<Vector, float> kvp in myForces)
             {
-                stopForces();
+                dir = kvp.Key;
+                force = kvp.Value;
+
+                ke = (float)((Math.Abs(force)));
+
+                if (force < 0)
+                {
+                    force += Drag;
+
+                    trans.translate(-1 * dir.X * ke, -1 * dir.Y * ke);
+                }
+
+                if (force > 0)
+                {
+                    force -= Drag;
+                    trans.translate(1 * dir.X * ke, 1 * dir.Y * ke);
+                }
+
+                if (Math.Abs(force) < Drag)
+                {
+                    toRemove.Add(dir);
+                    force = 0;
+                }
+
+
+                forceOffsets[dir] = force;
+
             }
-            else if (force > 0)
+
+
+
+            foreach (KeyValuePair<Vector, float> kvp in forceOffsets)
             {
-                this.force = (this.force / force) * (force - Drag);
+                dir = kvp.Key;
+                force = kvp.Value;
+
+                myForces[dir] = force;
             }
 
 
+            forceOffsets.Clear();
+
+            foreach (Vector d in toRemove)
+            {
+                myForces.Remove(d);
+            }
+
+            //            recalculateColliders();
 
         }
 
@@ -374,9 +477,9 @@ namespace Shard
             return myColliders;
         }
 
-        public Vector2? checkCollisions(Vector2 other)
+        public Vector checkCollisions(Vector other)
         {
-            Vector2? d;
+            Vector d;
 
 
             foreach (Collider c in myColliders)
@@ -393,11 +496,11 @@ namespace Shard
         }
 
 
-        public Vector2? checkCollisions(Collider other)
+        public Vector checkCollisions(Collider other)
         {
-            Vector2? d;
+            Vector d;
 
-//            Debug.Log("Checking collision with " + other);
+            Debug.Log("Checking collision with " + other);
             foreach (Collider c in myColliders)
             {
                 d = c.checkCollision(other);

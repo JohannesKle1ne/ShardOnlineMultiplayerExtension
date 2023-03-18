@@ -138,13 +138,13 @@ namespace GameTest
             if (up)
             {
 
-                MyBody.addForce(this.Transform.Forward, 0.5f);
+                //MyBody.addForce(this.Transform.Forward, 0.5f);
 
             }
 
             if (down)
             {
-                MyBody.addForce(this.Transform.Forward, -0.2f);
+                //MyBody.addForce(this.Transform.Forward, -0.2f);
             }
 
 

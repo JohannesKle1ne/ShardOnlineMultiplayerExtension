@@ -8,7 +8,6 @@
 */
 
 using System.Drawing;
-using System.Numerics;
 
 namespace Shard
 {
@@ -17,7 +16,6 @@ namespace Shard
         private CollisionHandler gameObject;
         private float[] minAndMaxX;
         private float[] minAndMaxY;
-        private bool rotateAtOffset;
 
         public abstract void recalculate();
         public Collider(CollisionHandler gob)
@@ -31,15 +29,13 @@ namespace Shard
         internal CollisionHandler GameObject { get => gameObject; set => gameObject = value; }
         internal float[] MinAndMaxX { get => minAndMaxX; set => minAndMaxX = value; }
         internal float[] MinAndMaxY { get => minAndMaxY; set => minAndMaxY = value; }
-        public bool RotateAtOffset { get => rotateAtOffset; set => rotateAtOffset = value; }
+        public abstract Vector checkCollision(ColliderRect c);
 
-        public abstract Vector2? checkCollision(ColliderRect c);
+        public abstract Vector checkCollision(Vector c);
 
-        public abstract Vector2? checkCollision(Vector2 c);
+        public abstract Vector checkCollision(ColliderCircle c);
 
-        public abstract Vector2? checkCollision(ColliderCircle c);
-
-        public virtual Vector2? checkCollision(Collider c)
+        public virtual Vector checkCollision(Collider c)
         {
 
             if (c is ColliderRect)

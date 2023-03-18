@@ -8,7 +8,6 @@
 
 using System;
 using System.Drawing;
-using System.Numerics;
 
 namespace Shard
 {
@@ -19,14 +18,16 @@ namespace Shard
         private float x, y, wid, ht;
         private bool fromTrans;
 
-
+        public override  Vector checkCollision(ColliderCircle c)
+        {
+            return new Vector();
+        }
 
         public ColliderRect(CollisionHandler gob, Transform t) : base(gob)
         {
 
             this.MyRect = t;
             fromTrans = true;
-            RotateAtOffset = false;
             calculateBoundingBox();
         }
 
@@ -36,7 +37,6 @@ namespace Shard
             Y = y;
             BaseWid = wid;
             BaseHt = ht;
-            RotateAtOffset = true;
 
             this.MyRect = t;
 
@@ -80,18 +80,18 @@ namespace Shard
             Wid = nwid;
             Ht = nht;
 
-            if (RotateAtOffset) {
-                // Now we work out the X and Y based on the rotation of the body to 
-                // which this belongs,.
-                x1 = X - MyRect.Centre.X;
-                y1 = Y - MyRect.Centre.Y;
 
-                x2 = (float)(x1 * Math.Cos(angle) - y1 * Math.Sin(angle));
-                y2 = (float)(x1 * Math.Sin(angle) + y1 * Math.Cos(angle));
+            // Now we work out the X and Y based on the rotation of the body to 
+            // which this belongs,.
+            x1 = X - MyRect.Centre.X;
+            y1 = Y - MyRect.Centre.Y;
 
-                X = x2 + (float)MyRect.Centre.X;
-                Y = y2 + (float)MyRect.Centre.Y;
-            }
+            x2 = (float)(x1 * Math.Cos(angle) - y1 * Math.Sin(angle));
+            y2 = (float)(x1 * Math.Sin(angle) + y1 * Math.Cos(angle));
+
+            X = x2 + (float)MyRect.Centre.X;
+            Y = y2 + (float)MyRect.Centre.Y;
+
 
             MinAndMaxX[0] = X - Wid / 2;
             MinAndMaxX[1] = X + Wid / 2;
@@ -141,43 +141,43 @@ namespace Shard
             return mink;
         }
 
-        public Vector2? calculatePenetration(Vector2 checkPoint)
+        public Vector calculatePenetration(Vector checkPoint)
         {
-            Vector2? impulse;
-            float coff = 0.2f;
+            Vector impulse;
+            int coff = 0;
 
             // Check the right edge
             float min;
 
             min = Math.Abs(Right - checkPoint.X);
-            impulse = new Vector2(-1 * min - coff, checkPoint.Y);
+            impulse = new Vector(-1 * min - coff, checkPoint.Y);
 
-
+        
             // Now compare against the Left edge
-            if (Math.Abs(checkPoint.X - Left) <= min)
+            if (Math.Abs(checkPoint.X - Left) < min)
             {
                 min = Math.Abs(checkPoint.X - Left);
-                impulse = new Vector2(min + coff, checkPoint.Y);
+                impulse = new Vector(min + coff, checkPoint.Y);
             }
 
             // Now the bottom
-            if (Math.Abs(Bottom - checkPoint.Y) <= min)
+            if (Math.Abs(Bottom - checkPoint.Y) < min)
             {
                 min = Math.Abs(Bottom - checkPoint.Y);
-                impulse = new Vector2(checkPoint.X, min + coff);
+                impulse = new Vector(checkPoint.X, min + coff);
             }
 
             // And now the top
-            if (Math.Abs(Top - checkPoint.Y) <= min)
+            if (Math.Abs(Top - checkPoint.Y) < min)
             {
                 min = Math.Abs(Top - checkPoint.Y);
-                impulse = new Vector2(checkPoint.X, -1 * min - coff);
+                impulse = new Vector(checkPoint.X, -1 * min - coff);
             }
 
             return impulse;
         }
 
-        public override Vector2? checkCollision(ColliderRect other)
+        public override Vector checkCollision(ColliderRect other)
         {
             ColliderRect cr;
 
@@ -185,7 +185,7 @@ namespace Shard
 
             if (cr.Left <= 0 && cr.Right >= 0 && cr.Top <= 0 && cr.Bottom >= 0)
             {
-                return cr.calculatePenetration(new Vector2(0, 0));
+                return cr.calculatePenetration(new Vector(0, 0));
             }
 
 
@@ -206,19 +206,18 @@ namespace Shard
             d.drawCircle((int)X, (int)Y, 2, col);
         }
 
-        public override Vector2? checkCollision(ColliderCircle c)
-        {
-            Vector2? possibleV = c.checkCollision(this);
+        //public override Vector checkCollision(ColliderCircle c)
+        //{
+        //    Vector v = c.checkCollision(this);
 
-            if (possibleV is Vector2 v)
-            {
-                v.X *= -1;
-                v.Y *= -1;
-                return v;
-            }
+        //    if (v != null)
+        //    {
+        //        v.X *= -1;
+        //        v.Y *= -1;
+        //    }
 
-            return null;
-        }
+        //    return v;
+        //}
 
         public override float[] getMinAndMaxX()
         {
@@ -230,7 +229,7 @@ namespace Shard
             return MinAndMaxY;
         }
 
-        public override Vector2? checkCollision(Vector2 other)
+        public override Vector checkCollision(Vector other)
         {
 
             if (other.X >= Left &&
@@ -238,7 +237,7 @@ namespace Shard
                 other.Y >= Top &&
                 other.Y <= Bottom)
             {
-                return new Vector2(0, 0);
+                return new Vector(0, 0);
             }
 
             return null;

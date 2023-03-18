@@ -159,7 +159,7 @@ namespace GameBreakout
                 }
 
                 MyBody.stopForces();
-                MyBody.addForce(Dir, 15);
+                //MyBody.addForce(Dir, 15);
 
                 LastDir = Dir;
                 dir = Vector2.Zero;

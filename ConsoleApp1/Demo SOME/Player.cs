@@ -75,6 +75,18 @@ namespace JumpAndRun
             MyBody.PassThrough = false;
 
             spriteCounterDir = 1;
+
+            //MyBody.MaxTorque = 100;
+            //MyBody.Mass = 1;
+            //MyBody.AngularDrag = 0.0f;
+            //MyBody.MaxForce = 100;
+            //MyBody.UsesGravity = true;
+            //MyBody.StopOnCollision = false;
+            //MyBody.ReflectOnCollision = true;
+            //            MyBody.Kinematic = true;
+
+
+            
         }
 
         public override void syncedInitialize()

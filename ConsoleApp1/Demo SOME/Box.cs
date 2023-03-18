@@ -30,6 +30,14 @@ namespace JumpAndRun
 
             this.Transform.SpritePath = "ManicMinerSprites/box.png";
 
+            //MyBody.MaxTorque = 100;
+            //MyBody.Mass = 1;
+            //MyBody.AngularDrag = 0.0f;
+            //MyBody.MaxForce = 100;
+            //MyBody.UsesGravity = true;
+            //MyBody.StopOnCollision = false;
+            //MyBody.ReflectOnCollision = true;
+
             addTag("Box");
 
         }

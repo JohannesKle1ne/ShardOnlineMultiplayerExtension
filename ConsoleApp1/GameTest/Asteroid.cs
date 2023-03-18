@@ -11,10 +11,10 @@ namespace GameTest
 
             if (eventType == "MouseDown" && inp.Button == 2)
             {
-                if (MyBody.checkCollisions(new Vector2(inp.X, inp.Y)) != null)
-                {
-                    torqueCounter += 10;
-                }
+                //if (MyBody.checkCollisions(new Vector2(inp.X, inp.Y)) != null)
+                //{
+                //    torqueCounter += 10;
+                //}
             }
 
 
@@ -36,7 +36,7 @@ namespace GameTest
             //            MyBody.Kinematic = true;
 
 
-            MyBody.addForce(this.Transform.Right, 20.5f);
+            //MyBody.addForce(this.Transform.Right, 20.5f);
             //            MyBody.addCircleCollider(32, 32, 30);
             MyBody.addRectCollider();
             Bootstrap.getInput().addListener(this);

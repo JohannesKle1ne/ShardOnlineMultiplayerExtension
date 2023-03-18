@@ -15,62 +15,29 @@
 *       
 *   @author Michael Heron
 *   @version 1.0
-
-*   Several substantial contributions to the code made by others:
-*   @author Mårten Åsberg (see Changelog for 1.0.1)
-*
 *   
 */
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
 
 namespace Shard
 {
 
 
-    /*
-     * An internal class used to hold a combination of two potentially colliding objects. 
-     */
-
     class CollidingObject
     {
         PhysicsBody a, b;
 
-        public CollidingObject() {
-        }
-
-        public CollidingObject (PhysicsBody x, PhysicsBody y) {
-            A = x;
-            B = y;
-        }
-
         internal PhysicsBody A { get => a; set => a = value; }
         internal PhysicsBody B { get => b; set => b = value; }
-
-        public override bool Equals(object other) {
-            return other is CollidingObject co &&
-                (A == co.A && B == co.B ||
-                A == co.B && B == co.A);
-        }
-
-        public override int GetHashCode() {
-            return A.GetHashCode() ^ B.GetHashCode();
-        }
 
         public override String ToString()
         {
             return "[" + A.Parent.ToString() + " v " + B.Parent.ToString() + "]";
         }
     }
-
-    /*
-     * SAP is Search and Prune, a broad pass collision detection algorithm and the one used
-     * in the course.   This is an internal class used to contain a node in what will be a 
-     * linked list used elsewhere in this code.
-     */
 
     class SAPEntry
     {
@@ -90,58 +57,31 @@ namespace Shard
     {
         private static PhysicsManager me;
         private List<CollidingObject> collisionsToCheck;
-        HashSet<CollidingObject> colliding;
-            
-        private long timeInterval;
+        List<CollidingObject> colliding;
+        private bool debugging;
+        private double timeInterval;
         SAPEntry sapX, sapY;
-        float gravityModifier;
-        Vector2 gravityDir;
+        double start;
+        float gravityModifier = 0.1f;
 
         List<PhysicsBody> allPhysicsObjects;
         private long lastUpdate;
         private long lastDebugDraw;
         private PhysicsManager()
         {
-            string tmp = "";
-            string[] tmpbits;
-
             allPhysicsObjects = new List<PhysicsBody>();
-            colliding = new HashSet<CollidingObject>();
+            colliding = new List<CollidingObject>();
 
             lastUpdate = Bootstrap.getCurrentMillis();
 
             collisionsToCheck = new List<CollidingObject>();
 
-            gravityDir = new Vector2(0, 1);
-            // 50 FPS            
+            start = 0;
+            // 60 FPS
+            TimeInterval = 0.02;
+        }
 
-            TimeInterval = 20;
-            
-            if (Bootstrap.checkEnvironmentalVariable("gravity_modifier"))
-            {
-                gravityModifier = float.Parse
-                    (Bootstrap.getEnvironmentalVariable("gravity_modifier"));
-            }
-            else
-            {
-                gravityModifier = 0.1f;
-            }
-
-            if (Bootstrap.checkEnvironmentalVariable("gravity_dir")) {
-                tmp = Bootstrap.getEnvironmentalVariable("gravity_dir");
-
-                tmpbits = tmp.Split(",");
-
-                gravityDir = new Vector2(int.Parse(tmpbits[0]), int.Parse(tmpbits[1]));
-            }
-            else {
-                gravityDir = new Vector2 (0, 1);
-            }
-
-            
-    }
-
-    public static PhysicsManager getInstance()
+        public static PhysicsManager getInstance()
         {
             if (me == null)
             {
@@ -153,7 +93,8 @@ namespace Shard
 
 
         public long LastUpdate { get => lastUpdate; set => lastUpdate = value; }
-        public long TimeInterval { get => timeInterval; set => timeInterval = value; }
+        public bool Debugging { get => debugging; set => debugging = value; }
+        public double TimeInterval { get => timeInterval; set => timeInterval = value; }
         public long LastDebugDraw { get => lastDebugDraw; set => lastDebugDraw = value; }
         public float GravityModifier { get => gravityModifier; set => gravityModifier = value; }
 
@@ -170,7 +111,20 @@ namespace Shard
 
         public void removePhysicsObject(PhysicsBody body)
         {
-                allPhysicsObjects.Remove(body);           
+            allPhysicsObjects.Remove(body);
+        }
+
+        public CollidingObject checkForExistingCollision(PhysicsBody A, PhysicsBody B)
+        {
+            foreach (CollidingObject col in colliding)
+            {
+                if (col.A == A && col.B == B)
+                {
+                    return col;
+                }
+            }
+
+            return null;
         }
 
         public void clearList(SAPEntry node)
@@ -267,18 +221,27 @@ namespace Shard
 
         public bool willTick()
         {
-            if (Bootstrap.getCurrentMillis() - lastUpdate > TimeInterval)
+
+
+            if (start < TimeInterval)
             {
-                return true;
+                return false;
             }
 
-            return false;
+
+            return true;
+
         }
 
         public bool update()
         {
             CollisionHandler ch, ch2;
             List<CollidingObject> toRemove;
+
+
+            start += Bootstrap.getDeltaTime();
+
+
 
             if (willTick() == false)
             {
@@ -292,17 +255,16 @@ namespace Shard
 
             toRemove = new List<CollidingObject>();
 
+
             foreach (PhysicsBody body in allPhysicsObjects)
             {
-
-                if (body.UsesGravity) {
-                    body.applyGravity(gravityModifier, gravityDir);
+                if (body.UsesGravity)
+                {
+                    body.applyGravity(GravityModifier);
                 }
 
                 body.physicsTick();
                 body.recalculateColliders();
-
-
             }
 
 
@@ -311,57 +273,41 @@ namespace Shard
             {
                 ch = (CollisionHandler)col.A.Parent;
                 ch2 = (CollisionHandler)col.B.Parent;
-                Vector2? impulse;
-
-                // If the object has been destroyed in the interim, it should still 
-                // trigger a collision exit.
-                if (col.A.Parent.ToBeDestroyed) {
-                    ch2.onCollisionExit (null);
-                    toRemove.Add(col);
-                }
-
-                if (col.B.Parent.ToBeDestroyed)
-                {
-                    ch.onCollisionExit(null);
-                    toRemove.Add(col);
-                }
+                Vector impulse;
 
                 impulse = checkCollisionBetweenObjects(col.A, col.B);
+
+                //bool isRight = isRightOf(col.A, col.B);
+                //bool isBelow = isTopOf(col.A, col.B);
+
                 string direction = getCollisionDirection(col.A, col.B);
 
                 if (impulse != null)
                 {
                     ch.onCollisionStay(col.B);
                     ch2.onCollisionStay(col.A);
-
-
-
-
-                    if (ch is PositionCollisionHandler)
+                    if (col.A.Parent is PositionCollisionHandler)
                     {
-                        ((PositionCollisionHandler)ch).onCollisionStay(col.B, direction);
+                        ((PositionCollisionHandler)col.A.Parent).onCollisionStay(col.B, direction);
                     }
-
-                    if (ch2 is PositionCollisionHandler)
+                    if (col.B.Parent is PositionCollisionHandler)
                     {
-                        ((PositionCollisionHandler)ch2).onCollisionStay(col.A, inverseDirection(direction));
+                        ((PositionCollisionHandler)col.B.Parent).onCollisionStay(col.A, inverseDirection(direction));
                     }
                 }
                 else
                 {
                     ch.onCollisionExit(col.B);
                     ch2.onCollisionExit(col.A);
-
-                    if (ch is PositionCollisionHandler)
+                    if (col.A.Parent is PositionCollisionHandler)
                     {
-                        ((PositionCollisionHandler)ch).onCollisionExit(col.B, direction);
+                       
+                    ((PositionCollisionHandler)col.A.Parent).onCollisionExit(col.B, direction);
                     }
-
-                    if (ch2 is PositionCollisionHandler)
+                    if (col.B.Parent is PositionCollisionHandler)
                     {
-                        ((PositionCollisionHandler)ch2).onCollisionExit(col.A, inverseDirection(direction));
+                       ((PositionCollisionHandler)col.B.Parent).onCollisionExit(col.A, inverseDirection(direction));
                     }
-
                     toRemove.Add(col);
                 }
 
@@ -376,12 +322,12 @@ namespace Shard
             // Check for new collisions
             checkForCollisions();
 
+            start -= TimeInterval;
+
+            //            Debug.Log("Time Interval is " + (Bootstrap.getCurrentMillis() - lastUpdate) + ", " + colliding.Count);
 
 
-                //            Debug.Log("Time Interval is " + (Bootstrap.getCurrentMillis() - lastUpdate) + ", " + colliding.Count);
-
-
-                return true;
+            return true;
         }
 
         public void drawDebugColliders()
@@ -393,16 +339,15 @@ namespace Shard
             }
         }
 
-        private Vector2? checkCollisionBetweenObjects(PhysicsBody a, PhysicsBody b)
+        private Vector checkCollisionBetweenObjects(PhysicsBody a, PhysicsBody b)
         {
-            Vector2? impulse;
+            Vector impulse;
 
             foreach (Collider col in a.getColliders())
             {
                 foreach (Collider col2 in b.getColliders())
                 {
                     impulse = col.checkCollision(col2);
-
 
                     if (impulse != null)
                     {
@@ -436,12 +381,12 @@ namespace Shard
                         continue;
                     }
 
-                    if (findColliding(allPhysicsObjects[i], allPhysicsObjects[j]))
+                    if (checkForExistingCollision(allPhysicsObjects[i], allPhysicsObjects[j]) != null)
                     {
                         continue;
                     }
 
-                    if (findColliding(allPhysicsObjects[j], allPhysicsObjects[i]))
+                    if (checkForExistingCollision(allPhysicsObjects[j], allPhysicsObjects[i]) != null)
                     {
                         continue;
                     }
@@ -456,135 +401,58 @@ namespace Shard
                 }
             }
 
-//            Debug.Log("Checking " + collisionsToCheck.Count + " collisions");
+            Debug.Log("Checking " + collisionsToCheck.Count + " collisions");
 
         }
 
-        public bool findColliding(PhysicsBody a, PhysicsBody b) {
-            CollidingObject col = new CollidingObject (a, b);
-              
-            return colliding.Contains(col);
-        }
-
-        private void narrowPass()
+        public bool findColliding(PhysicsBody a, PhysicsBody b)
         {
-            Vector2 impulse;
-            Vector2? possibleImpulse;
-            float massTotal, massa, massb;
-            float massProp = 0.0f;
-
-            //            Debug.getInstance().log("Active objects " + collisionsToCheck.Count);
-
-            foreach (CollidingObject ob in collisionsToCheck)
+            foreach (CollidingObject ob in colliding)
             {
-
-                possibleImpulse = checkCollisionBetweenObjects(ob.A, ob.B);
-
-                if (possibleImpulse.HasValue)
+                if (ob.A == a && ob.B == b)
                 {
-                    impulse = possibleImpulse.Value;
-                    Debug.Log("Col is " + ob + ", impulse " + possibleImpulse);
-
-                    if (ob.A.PassThrough != true && ob.B.PassThrough != true)
-                    {
-
-
-                        massTotal = ob.A.Mass + ob.B.Mass;
-
-                        if (ob.A.Kinematic)
-                        {
-                            massProp = 1;
-                        }
-                        else
-                        {
-                            massProp = ob.A.Mass / massTotal;
-
-                        }
-
-
-                        if (ob.A.ImpartForce)
-                        {
-                            ob.A.impartForces(ob.B, massProp);
-                            ob.A.reduceForces(1.0f - massProp);
-                        }
-
-                        massb = massProp;
-
-                        if (ob.B.Kinematic == false)
-                        {
-                            ob.B.Parent.Transform.translate(-1 * (impulse.X * massProp), -1 * (impulse.Y * massProp));
-                        }
-
-
-                        if (ob.B.Kinematic)
-                        {
-                            massProp = 1;
-                        }
-                        else
-                        {
-                            massProp = 1.0f - massProp;
-                        }
-
-                        massa = massProp;
-
-
-                        if (ob.A.Kinematic == false)
-                        {
-
-                            ob.A.Parent.Transform.translate((impulse.X * massProp), (impulse.Y * massProp));
-                        }
-
-
-                        if (ob.A.StopOnCollision)
-                        {
-                            ob.A.stopForces();
-                        }
-
-                        if (ob.B.StopOnCollision)
-                        {
-                            ob.B.stopForces();
-                        }
-
-
-                    }
-
-                    string direction = getCollisionDirection(ob.A, ob.B);
-
-
-                    ((CollisionHandler)ob.A.Parent).onCollisionEnter(ob.B);
-                    ((CollisionHandler)ob.B.Parent).onCollisionEnter(ob.A);
-
-
-                    if (ob.A.Parent is PositionCollisionHandler)
-                    {
-                        ((PositionCollisionHandler)ob.A.Parent).onCollisionEnter(ob.B, direction);
-                    }
-
-                    if (ob.B.Parent is PositionCollisionHandler)
-                    {
-                        ((PositionCollisionHandler)ob.B.Parent).onCollisionEnter(ob.A, inverseDirection(direction));
-                    }
-
-                    colliding.Add(ob);
-
-
-
-                    if (ob.A.ReflectOnCollision)
-                    {                        
-                        ob.A.reflectForces(impulse);
-                    }
-                    if (ob.B.ReflectOnCollision)
-                    {
-                        ob.B.reflectForces(impulse);
-                    }
-
-
+                    return true;
                 }
-
-
             }
+
+            return false;
         }
 
+        public bool isRightOf(PhysicsBody a, PhysicsBody b)
+        {
+            float aMidX = a.MinAndMaxX[0] + (a.MinAndMaxX[1] - a.MinAndMaxX[0]) / 2;
+            float bMidX = b.MinAndMaxX[0] + (b.MinAndMaxX[1] - b.MinAndMaxX[0]) / 2;
+
+            float bMaxX = b.MinAndMaxX[1];
+            float aMinX = a.MinAndMaxX[0];
+
+
+
+            return aMinX >= bMaxX;
+
+            return (aMidX - bMidX) > 0;
+        }
+        public bool isTopOf(PhysicsBody a, PhysicsBody b)
+        {
+            //float aMidY = a.MinAndMaxY[0] + (a.MinAndMaxY[1] - a.MinAndMaxY[0]) / 2;
+            //float bMidY = b.MinAndMaxY[0] + (b.MinAndMaxY[1] - b.MinAndMaxY[0]) / 2;
+
+            //float bMinY = b.MinAndMaxY[0];
+            //float aMaxY = a.MinAndMaxY[1];
+
+            float bMinY = b.MinAndMaxY[0];
+            float bMaxY = b.MinAndMaxY[1];
+            float aMinY = a.MinAndMaxY[0];
+            float aMaxY = a.MinAndMaxY[1];
+
+            float distToTop = bMaxY - aMinY;
+
+            return bMaxY - aMinY < 5;
+
+            return aMaxY <= bMinY;
+
+            //return (aMidY -bMidY) > 0;
+        }
         public string inverseDirection(string direction)
         {
             if (direction == "Right")
@@ -603,10 +471,9 @@ namespace Shard
             return "Top";
 
         }
-
         public string getCollisionDirection(PhysicsBody a, PhysicsBody b)
         {
-            float bMinY = b.MinAndMaxY[0];
+            float bMinY =b.MinAndMaxY[0];
             float bMaxY = b.MinAndMaxY[1];
             float aMinY = a.MinAndMaxY[0];
             float aMaxY = a.MinAndMaxY[1];
@@ -643,6 +510,178 @@ namespace Shard
             return "Right";
 
 
+        }
+
+
+        private void narrowPass()
+        {
+            Vector impulse;
+            float massTotal, massa, massb;
+            float massProp = 0.0f;
+
+            //            Debug.getInstance().log("Active objects " + collisionsToCheck.Count);
+
+            foreach (CollidingObject ob in collisionsToCheck)
+            {
+
+
+                impulse = checkCollisionBetweenObjects(ob.A, ob.B);
+
+
+                if (impulse != null)
+                {
+
+                    if (ob.A.PassThrough != true && ob.B.PassThrough != true)
+                    {
+
+                       
+
+                        massTotal = ob.A.Mass + ob.B.Mass;
+
+                        if (ob.A.Kinematic)
+                        {
+                            massProp = 1;
+                        }
+                        else
+                        {
+                            massProp = ob.A.Mass / massTotal;
+
+                        }
+
+                        if (ob.A.ImpartForce)
+                        {
+                            ob.A.impartForces(ob.B, massProp);
+                            ob.A.reduceForces(1.0f - massProp);
+                        }
+
+
+                        if (ob.A.StopOnCollision)
+                        {
+                            ob.A.stopForces();
+                        }
+
+
+                        massb = massProp;
+
+                        if (ob.B.Kinematic == false)
+                        {
+                            //Debug.Log ("Applying force to B " + impulse + ", " + massProp);
+                            ob.B.Parent.Transform.translate(-1 * (impulse.X * massProp), -1 * (impulse.Y * massProp));
+                        }
+
+
+                        if (ob.B.Kinematic)
+                        {
+                            massProp = 1;
+                        }
+                        else
+                        {
+                            massProp = 1.0f - massProp;
+                        }
+
+                        massa = massProp;
+
+
+                        if (ob.A.Kinematic == false)
+                        {
+
+                            ob.A.Parent.Transform.translate((impulse.X * massProp), (impulse.Y * massProp));
+                        }
+
+                        if (ob.B.StopOnCollision)
+                        {            
+                            ob.B.stopForces();
+                        }
+
+
+                    }
+
+
+
+                    //bool isRight = isRightOf(ob.A, ob.B);
+                    //bool isBelow = isTopOf(ob.A, ob.B);
+                    string direction = getCollisionDirection(ob.A, ob.B);
+
+                    if (findColliding(ob.A, ob.B) == false)
+                    {
+                        ((CollisionHandler)ob.A.Parent).onCollisionEnter(ob.B);
+                        ((CollisionHandler)ob.B.Parent).onCollisionEnter(ob.A);
+
+                        if (ob.A.Parent is PositionCollisionHandler)
+                        {
+                            ((PositionCollisionHandler)ob.A.Parent).onCollisionEnter(ob.B, direction);
+                            //float bMinY = ob.B.MinAndMaxY[0];
+                            //float aMaxY = ob.A.MinAndMaxY[1];
+
+                            //Debug.Log("A: " + aMaxY + " B: " + bMinY);
+                            //float aMidX = ob.A.MinAndMaxX[1] - ob.A.MinAndMaxX[0];
+                            //float bMidX = ob.B.MinAndMaxX[1] - ob.B.MinAndMaxX[0];
+                            //Debug.Log("amidx: " + aMidX);
+                            //Debug.Log("bmidx: " + bMidX);
+                        }
+                        if (ob.B.Parent is PositionCollisionHandler)
+                        {
+                            ((PositionCollisionHandler)ob.B.Parent).onCollisionEnter(ob.A, inverseDirection(direction));
+                            float bMinY = ob.B.MinAndMaxY[0];
+                            float bMaxY = ob.B.MinAndMaxY[1];
+                            float aMinY = ob.A.MinAndMaxY[0];
+                            float aMaxY = ob.A.MinAndMaxY[1];
+
+                            float bMinX = ob.B.MinAndMaxX[0];
+                            float bMaxX = ob.B.MinAndMaxX[1];
+                            float aMinX = ob.A.MinAndMaxX[0];
+                            float aMaxX = ob.A.MinAndMaxX[1];
+
+
+
+                           // Debug.Log("Diff Top: "+(bMaxY - aMinY));
+                            float diffTop = Math.Abs(bMaxY - aMinY);
+                           // Debug.Log("Diff Bottom: " + (bMinY - aMaxY));
+                            float diffBottom = Math.Abs(bMinY - aMaxY);
+                           // Debug.Log("Diff Left: " + (bMaxX - aMinX));
+                            float diffRight = Math.Abs(bMaxX - aMinX);
+                           // Debug.Log("Diff Right: " + (bMinX - aMaxX));
+                            float diffLeft = Math.Abs(bMinX - aMaxX);
+                            //if(bMaxY - aMinY<5)
+                            //float aMidX = ob.A.MinAndMaxX[1] - ob.A.MinAndMaxX[0];
+                            //float bMidX = ob.B.MinAndMaxX[1] - ob.B.MinAndMaxX[0];
+                            //Debug.Log("amidx: " + aMidX);
+                            //Debug.Log("bmidx: " + bMidX);
+                        }
+
+                        colliding.Add(ob);
+                    }
+                    else
+                    {
+                        ((CollisionHandler)ob.A.Parent).onCollisionStay(ob.B);
+                        ((CollisionHandler)ob.B.Parent).onCollisionStay(ob.A);
+                        if (ob.A.Parent is PositionCollisionHandler)
+                        {
+                            ((PositionCollisionHandler)ob.A.Parent).onCollisionStay(ob.B, direction);
+                        }
+                        if (ob.B.Parent is PositionCollisionHandler)
+                        {
+                            ((PositionCollisionHandler)ob.B.Parent).onCollisionStay(ob.A, inverseDirection(direction));
+                        }
+                    }
+
+
+                    if (ob.A.ReflectOnCollision)
+                    {
+                        Debug.Log("Reflecting A");
+                        ob.A.reflectForces(impulse);
+                    }
+                    if (ob.B.ReflectOnCollision)
+                    {
+                        ob.B.reflectForces(impulse);
+                        Debug.Log("Reflecting B");
+                    }
+
+
+                }
+
+
+            }
         }
 
         public void reportCollisionsInAxis(SAPEntry start)
@@ -689,11 +728,9 @@ namespace Shard
                             col.A = activeObjects[i].Owner;
                         }
 
-                        if (!findColliding(col.A, col.B))
-                        {
-                            collisionsToCheck.Add(col);
-                        }
-                        // Debug.getInstance().log("Adding potential collision: " + col.ToString());
+
+                        collisionsToCheck.Add(col);
+                        //                        Debug.getInstance().log("Adding potential collision: " + col.ToString());
 
                     }
 
@@ -712,7 +749,7 @@ namespace Shard
 
             }
 
-            //            Debug.Log("Checking " + collisionsToCheck.Count + " collisions");
+//            Debug.Log("Checking " + collisionsToCheck.Count + " collisions");
 
         }
 
@@ -758,7 +795,7 @@ namespace Shard
         public void broadPass()
         {
             broadPassSearchAndSweep();
-//          broadPassBruteForce();
+//            broadPassBruteForce();
         }
 
 
